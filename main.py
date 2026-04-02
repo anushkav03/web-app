@@ -25,8 +25,8 @@ posts: list[dict] = [
     }
 ]
 
-@app.get("/", include_in_schema=False) # html for humans
-@app.get("/posts", include_in_schema=False) # don't want duplicate routes in schema
+@app.get("/", include_in_schema=False, name="home") # html for humans
+@app.get("/posts", include_in_schema=False, name="posts") # don't want duplicate routes in schema
 def home(request: Request): # jinja2 needs request parameter, will use when calling template
     #return f"<h1>{posts[0]['title']}<h1>"
     return templates.TemplateResponse(request, "home_finished.html", {"posts": posts, "title": "Home"})
