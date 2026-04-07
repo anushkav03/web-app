@@ -7,6 +7,8 @@ from fastapi.responses import JSONResponse
 # importing HTTPException twice because FastAPI exception is built ON TOP OF starlette and only handles a subset of all exception cases; starlette handles all cases
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from schemas import PostCreate, PostResponse
+
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -29,7 +31,7 @@ posts: list[dict] = [
     }
 ]
 
-## HTML ROUTES ##
+## --------------------- HTML ROUTES --------------------- ##
 @app.get("/", include_in_schema=False, name="home")
 @app.get("/posts", include_in_schema=False, name="posts") # don't want duplicate routes in schema
 def home(request: Request): # jinja2 needs request parameter, will use when calling template
@@ -55,19 +57,42 @@ def post_page(request: Request, post_id: int): # wtv you get as post_id - verify
 
 
 
-## API ROUTES ##
-@app.get("/api/posts") # for api
+## --------------------- API ROUTES --------------------- ##
+@app.get("/api/posts", response_model=list[PostResponse]) # for api
 def get_posts():
     return posts 
 
-@app.get("/api/posts/{post_id}") 
+# expose endpoint
+@app.post(
+        "/api/posts",
+        response_model=PostResponse,
+        status_code=status.HTTP_201_CREATED # this is new info
+        )
+def create_post(post: PostCreate):
+    # get id and make post object
+    new_id = max(p["id"] for p in posts) + 1 if posts else 1
+    new_post = {
+        "id": new_id,
+        "author": post.author,
+        "title": post.title,
+        "content": post.content,
+        "date_posted": "Tue April 7, 2026"
+        }
+    
+    # add to posts list
+    posts.append(new_post)
+    return new_post
+
+@app.get(
+        "/api/posts/{post_id}",
+        response_model=PostResponse) 
 def get_post(post_id: int):
     for post in posts:
         if post["id"] == post_id:
             return post
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
 
-## ERROR HANDLING ##
+## --------------------- ERROR HANDLING --------------------- ##
 # catches some exception errors raised automatically by FastAPI (ex. 404)
 # as well as any exceptions you manually raise - like in /posts/post_id
 @app.exception_handler(StarletteHTTPException)
