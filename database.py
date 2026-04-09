@@ -5,7 +5,7 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 # ./blog.db is current directory, and blog.db will be automatically created
 SQLALCHEMY_DATABASE_URL = "sqlite:///./blog.db"
 
-# check_same_thread is something about concurrency (?) and False setting 
+# check_same_thread is something about concurrency (?) and its False setting 
 # is specifically for sqlite
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,

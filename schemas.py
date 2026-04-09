@@ -2,7 +2,6 @@ from pydantic import BaseModel, ConfigDict, Field, EmailStr
 # our models will all inherit from BaseModel
 
 from datetime import datetime
-from typing import Optional
 
 class UserBase(BaseModel):
     # fields should be what is shared between UserCreate and UserResponse
@@ -18,7 +17,7 @@ class UserResponse(UserBase):
     id: int
 
     # why are we returning these?
-    image_file: Optional[str]
+    image_file: str | None
     # note image_path is @property in the User model. model_config lets
     # pydantic read it as an attribute so we don't have to recompute file path 
     image_path: str
