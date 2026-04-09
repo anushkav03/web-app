@@ -1,14 +1,40 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, EmailStr
 # our models will all inherit from BaseModel
+
+from datetime import datetime
+from typing import Optional
+
+class UserBase(BaseModel):
+    # fields should be what is shared between UserCreate and UserResponse
+    username: str = Field(min_length=1, max_length=50)
+    email: EmailStr = Field(max_length=120) #EmailStr automatically validates correctness
+
+class UserCreate(UserBase):
+    pass
+
+class UserResponse(UserBase):
+    model_config = ConfigDict(from_attributes=True) # see comments in PostResponse
+ 
+    id: int
+
+    # why are we returning these?
+    image_file: Optional[str]
+    # note image_path is @property in the User model. model_config lets
+    # pydantic read it as an attribute so we don't have to recompute file path 
+    image_path: str
+
 
 # our base model for posts
 class PostBase(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     content: str = Field(min_length=1)
-    author: str = Field(min_length=1, max_length=50)
+    # comes from relationship now
+    #author: str = Field(min_length=1, max_length=50)
 
 class PostCreate(PostBase):
-    pass
+    user_id: int # temporary for testing
+    # eventually (after adding authentication) user_id will be
+    # automatically grabbed from session and passed in
 
 # What our API returns
 class PostResponse(PostBase):
@@ -19,4 +45,9 @@ class PostResponse(PostBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    date_posted: str
+    # why are we returning user_id? 
+    user_id: int
+    date_posted: datetime
+    # api response will give nested JSON with full 
+    # UserReponse details - email, username etc
+    author: UserResponse

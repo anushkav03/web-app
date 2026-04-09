@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, Request, status
+# Depends lets us inject database session into our routes
+from fastapi import FastAPI, HTTPException, Request, status, Depends
 #from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -6,11 +7,23 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 # importing HTTPException twice because FastAPI exception is built ON TOP OF starlette and only handles a subset of all exception cases; starlette handles all cases
 from starlette.exceptions import HTTPException as StarletteHTTPException
-
 from schemas import PostCreate, PostResponse
+from typing import Annotated
+from sqlalchemy import select
+from sqlalchemy.orm import session
+
+import models
+from database import Base, engine, get_db
+from schemas import PostCreate, PostResponse
+
+Base.metadata.create_all(bind=engine)
+# idempotent (safe to run multiple times)
+# actually creates database tables! references models.py
+# runs every time you start app
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/media", StaticFiles(directory="media"), name="media") # directory for user uploaded media
 
 templates = Jinja2Templates(directory="templates") # creates a Jinja2Templates object that knows to look in the templates directory
 
