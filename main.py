@@ -7,14 +7,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 # importing HTTPException twice because FastAPI exception is built ON TOP OF starlette and only handles a subset of all exception cases; starlette handles all cases
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from schemas import PostCreate, PostResponse
+from schemas import PostCreate, PostResponse, UserCreate, UserResponse
 from typing import Annotated
 from sqlalchemy import select
-from sqlalchemy.orm import session
+from sqlalchemy.orm import Session, session
 
 import models
 from database import Base, engine, get_db
-from schemas import PostCreate, PostResponse
 
 Base.metadata.create_all(bind=engine)
 # idempotent (safe to run multiple times)
@@ -27,22 +26,29 @@ app.mount("/media", StaticFiles(directory="media"), name="media") # directory fo
 
 templates = Jinja2Templates(directory="templates") # creates a Jinja2Templates object that knows to look in the templates directory
 
-posts: list[dict] = [
-    {
-        "id": 1,
-        "author": "Mishtu",
-        "title": "hawa hawaii",
-        "content": "oh oui oui oui oui",
-        "date_posted": "March 25, 2026"
-    },
-    {
-        "id": 2,
-        "author": "Quirinus Quirrell",
-        "title": "TROLLLLLL in the dungeon",
-        "content": "thought you ought to know",
-        "date_posted": "April 1, 2026"
-    }
-]
+# posts: list[dict] = [
+#     {
+#         "id": 1,
+#         "author": "Mishtu",
+#         "title": "hawa hawaii",
+#         "content": "oh oui oui oui oui",
+#         "date_posted": "March 25, 2026"
+#     },
+#     {
+#         "id": 2,
+#         "author": "Quirinus Quirrell",
+#         "title": "TROLLLLLL in the dungeon",
+#         "content": "thought you ought to know",
+#         "date_posted": "April 1, 2026"
+#     },
+#     {
+#       "id": 3,
+#       "author": "Squirrell",
+#       "title": "squirrel in the dungeon",
+#       "content": "nut",
+#       "date_posted": "April 12, 2026"  
+#     }
+# ]
 
 ## --------------------- HTML ROUTES --------------------- ##
 @app.get("/", include_in_schema=False, name="home")
@@ -71,6 +77,56 @@ def post_page(request: Request, post_id: int): # wtv you get as post_id - verify
 
 
 ## --------------------- API ROUTES --------------------- ##
+@app.post(
+        "/api/users",
+        response_model=UserResponse,
+        status_code=status.HTTP_201_CREATED
+        )
+def create_user(user: UserCreate, db: Annotated[Session, Depends(get_db)]):
+    # get id and make user object
+    # how to get new id based on what's in database? 
+
+    # similarly how check username, email unique
+    result = db.execute(
+        select(models.User)
+        .where(models.User.username == user.username)
+    )
+
+    # (per my understadning) returns as regular value instead of database row object type thing 
+    existing_username = result.scalars().first()
+    
+    if existing_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already taken!"
+        )
+    
+    result = db.execute(
+        select(models.User)
+        .where(models.User.email == user.email)
+    )
+
+    existing_email = result.scalars().first()
+    
+    if existing_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already exists!"
+        )
+
+    # add to users db
+    # treating model as a class in usage; 
+    new_user = models.User(
+        username=user.username,
+        email=user.email
+    )
+    db.add(new_user) # stages new user
+    db.commit() # executes 
+    db.refresh(new_user) # "reloads new user from database"? ok among other things: reloads the new_user obj from the database to get certain db-generated fields, like user_id for example
+
+    # pydantic automatically converts new_user return to PostResponse as specified in our route
+    return new_user
+
 @app.get("/api/posts", response_model=list[PostResponse]) # for api
 def get_posts():
     return posts 

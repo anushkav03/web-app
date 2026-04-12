@@ -25,3 +25,6 @@ class Base(DeclarativeBase):
 def get_db():
     with SessionLocal() as db:
         yield db
+    # crucially this cleans up a database session after each request finishes
+    # one session per request
+    # clean; standard fastapi pattern
