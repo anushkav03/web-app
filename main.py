@@ -10,7 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from schemas import PostCreate, PostResponse, UserCreate, UserResponse
 from typing import Annotated
 from sqlalchemy import select
-from sqlalchemy.orm import Session, session
+from sqlalchemy.orm import Session, session, selectinload, selectinload
 
 import models
 from database import Base, engine, get_db
@@ -33,20 +33,6 @@ templates = Jinja2Templates(directory="templates") # creates a Jinja2Templates o
 #         "title": "hawa hawaii",
 #         "content": "oh oui oui oui oui",
 #         "date_posted": "March 25, 2026"
-#     },
-#     {
-#         "id": 2,
-#         "author": "Quirinus Quirrell",
-#         "title": "TROLLLLLL in the dungeon",
-#         "content": "thought you ought to know",
-#         "date_posted": "April 1, 2026"
-#     },
-#     {
-#       "id": 3,
-#       "author": "Squirrell",
-#       "title": "squirrel in the dungeon",
-#       "content": "nut",
-#       "date_posted": "April 12, 2026"  
 #     }
 # ]
 
@@ -72,18 +58,32 @@ def post_page(request: Request, post_id: int, db: Annotated[Session, Depends(get
     )
     post = results.scalars().first()
     if post:
+        title = post.title[:50]
         return templates.TemplateResponse(
                 request, 
                 "post_finished.html", 
-                {"post": post, "title":post.title},
+                {"post": post, "title":title},
             )
-
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
     # if an API client makes an incorrect request, we want to return JSON
     # but if a user makes an incorrect request, we want to return an HTML page
     # => raise HTTPException which gets routed to exception handler
     # which sees this is not an API request, and returns an HTML template
 
+@app.get("/users/{user_id}/posts/", include_in_schema=False)
+def user_posts_page(request: Request, user_id: int, db: Annotated[Session, Depends(get_db)]):
+    results = db.execute(
+        select(models.Post)
+        .where(models.Post.user_id == user_id)        .options(selectinload(models.Post.author))    )
+    user_posts = results.scalars().all()
+    if user_posts:
+        username = user_posts[0].author.username
+        return templates.TemplateResponse(
+            request,
+            "home_finished.html",
+            {"posts": user_posts, "title":username}
+        )
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found :(")
 
 
 ## --------------------- API ROUTES --------------------- ##
@@ -208,12 +208,17 @@ def create_post(post: PostCreate, db: Annotated[Session, Depends(get_db)]):
         select(models.User)
         .where(models.User.id == post.user_id)
     ) 
-    user_obj = result.scalars().first() # won't be none
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This user does not exist!"
+        )
     new_post = models.Post(
         #"id": new_id, # she's a primary key => she's gonna autogenerate in db
-        author=user_obj, # supposed to be a User object, not str
         title=post.title,
-        content=post.content
+        content=post.content,
+        user_id=post.user_id,
     )
     
     # add to database
