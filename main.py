@@ -53,21 +53,31 @@ templates = Jinja2Templates(directory="templates") # creates a Jinja2Templates o
 ## --------------------- HTML ROUTES --------------------- ##
 @app.get("/", include_in_schema=False, name="home")
 @app.get("/posts", include_in_schema=False, name="posts") # don't want duplicate routes in schema
-def home(request: Request): # jinja2 needs request parameter, will use when calling template
+def home(request: Request, db: Annotated[Session, Depends(get_db)]): # jinja2 needs request parameter, will use when calling template
     #return f"<h1>{posts[0]['title']}<h1>"
-    return templates.TemplateResponse(request, "home_finished.html", {"posts": posts, "title": "Home"})
+    results = db.execute(select(models.Post))
+    posts = results.scalars().all()
+    return templates.TemplateResponse(
+        request, 
+        "home_finished.html", 
+        {"posts": posts, "title": "Home"}
+    )
 
 @app.get("/posts/{post_id}", include_in_schema=False) # wtv comes after /posts/ is variable post_id
-def post_page(request: Request, post_id: int): # wtv you get as post_id - verify it's an int
+def post_page(request: Request, post_id: int, db: Annotated[Session, Depends(get_db)]): # wtv you get as post_id - verify it's an int
     # WHERE IS REQUEST VARIABLE COMING FROM?? okay apparently you don't need to pass in a request
-    for post in posts:
-        if post["id"] == post_id:
-            title = post["title"][:50]
-            return templates.TemplateResponse(
+    results = db.execute(
+        select(models.Post)
+        .where(models.Post.id == post_id)
+    )
+    post = results.scalars().first()
+    if post:
+        return templates.TemplateResponse(
                 request, 
                 "post_finished.html", 
-                {"post": post, "title":title},
-                )
+                {"post": post, "title":post.title},
+            )
+
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
     # if an API client makes an incorrect request, we want to return JSON
     # but if a user makes an incorrect request, we want to return an HTML page
@@ -77,6 +87,7 @@ def post_page(request: Request, post_id: int): # wtv you get as post_id - verify
 
 
 ## --------------------- API ROUTES --------------------- ##
+# Create user
 @app.post(
         "/api/users",
         response_model=UserResponse,
@@ -122,44 +133,112 @@ def create_user(user: UserCreate, db: Annotated[Session, Depends(get_db)]):
     )
     db.add(new_user) # stages new user
     db.commit() # executes 
-    db.refresh(new_user) # "reloads new user from database"? ok among other things: reloads the new_user obj from the database to get certain db-generated fields, like user_id for example
+    db.refresh(new_user) # "reloads new user from database"? 
+    #ok among other things: reloads the new_user obj from the 
+    # database to get certain db-generated fields, like user_id 
+    # for example. tl;dr force reload gets the final persisted user object
 
     # pydantic automatically converts new_user return to PostResponse as specified in our route
     return new_user
 
-@app.get("/api/posts", response_model=list[PostResponse]) # for api
-def get_posts():
-    return posts 
+# Get user by user ID
+@app.get(
+        "/api/users/{user_id}",
+        response_model=UserResponse) 
+def get_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
+    result = db.execute(
+        select(models.User)
+        .where(models.User.id == user_id)
+    )
 
-# expose endpoint
+    found_user = result.scalars().first()
+    if found_user:
+        return found_user
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND, 
+        detail="This user ID does not exist!"
+    )
+
+# Get all of user's posts
+@app.get(
+    "/api/users/{user_id}/posts",
+    response_model=list[PostResponse]
+)
+def get_user_posts(user_id: int, db: Annotated[Session, Depends(get_db)]):
+    # verify user id exists in db, else raise HTTP exception
+    results = db.execute(
+        select(models.User)
+        .where(models.User.id == user_id)
+    )
+    found_user = results.scalars().first()
+    if not found_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This user ID does not exist!"
+        )
+    
+    # get all posts matching user id
+    results = db.execute(
+        select(models.Post)
+        .where(models.Post.user_id == user_id)
+    ) # why are we not using posts() fields in User model?
+    posts = results.scalars().all()
+    return posts
+
+# Get all posts
+@app.get(
+        "/api/posts", 
+        response_model=list[PostResponse]
+        ) # for api
+def get_posts(db: Annotated[Session, Depends(get_db)]):
+    results = db.execute(select(models.Post))
+    posts = results.scalars().all()
+    return posts
+
+# Create new post
 @app.post(
         "/api/posts",
         response_model=PostResponse,
         status_code=status.HTTP_201_CREATED # this is new info
         )
-def create_post(post: PostCreate):
+def create_post(post: PostCreate, db: Annotated[Session, Depends(get_db)]):
     # get id and make post object
-    new_id = max(p["id"] for p in posts) + 1 if posts else 1
-    new_post = {
-        "id": new_id,
-        "author": post.author,
-        "title": post.title,
-        "content": post.content,
-        "date_posted": "Tue April 7, 2026"
-        }
+    #new_id = max(p["id"] for p in posts) + 1 if posts else 1 ## db auto handles this for us now
+    result = db.execute(
+        select(models.User)
+        .where(models.User.id == post.user_id)
+    ) 
+    user_obj = result.scalars().first() # won't be none
+    new_post = models.Post(
+        #"id": new_id, # she's a primary key => she's gonna autogenerate in db
+        author=user_obj, # supposed to be a User object, not str
+        title=post.title,
+        content=post.content
+    )
     
-    # add to posts list
-    posts.append(new_post)
+    # add to database
+    db.add(new_post)
+    db.commit()
+    db.refresh(new_post)
+
     return new_post
 
+# Get post by post ID
 @app.get(
         "/api/posts/{post_id}",
         response_model=PostResponse) 
-def get_post(post_id: int):
-    for post in posts:
-        if post["id"] == post_id:
-            return post
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+def get_post(post_id: int, db: Annotated[Session, Depends(get_db)]):
+    results = db.execute(
+        select(models.Post)
+        .where(models.Post.id == post_id)
+    )
+    post = results.scalars().first()
+    if post:
+        return post
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="This post does not exist!"
+    )
 
 ## --------------------- ERROR HANDLING --------------------- ##
 # catches some exception errors raised automatically by FastAPI (ex. 404)
