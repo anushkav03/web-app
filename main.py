@@ -10,7 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from schemas import PostCreate, PostResponse, UserCreate, UserResponse
 from typing import Annotated
 from sqlalchemy import select
-from sqlalchemy.orm import Session, session, selectinload, selectinload
+from sqlalchemy.orm import Session, session
 
 import models
 from database import Base, engine, get_db
@@ -74,14 +74,15 @@ def post_page(request: Request, post_id: int, db: Annotated[Session, Depends(get
 def user_posts_page(request: Request, user_id: int, db: Annotated[Session, Depends(get_db)]):
     results = db.execute(
         select(models.Post)
-        .where(models.Post.user_id == user_id)        .options(selectinload(models.Post.author))    )
+        .where(models.Post.user_id == user_id)
+    )
     user_posts = results.scalars().all()
     if user_posts:
         username = user_posts[0].author.username
         return templates.TemplateResponse(
             request,
             "home_finished.html",
-            {"posts": user_posts, "title":username}
+            {"posts": user_posts, "title": username}
         )
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found :(")
 

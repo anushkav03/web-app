@@ -36,7 +36,7 @@ class User(Base):
             # recall self.image_file is just the file name as a string
             return f"/media/profile_pics/{self.image_file}"
         else:
-            return "static/profile_pics/default.jpg"
+            return "profile_pics/default.jpg"
         
 class Post(Base):
     __tablename__ = "posts"

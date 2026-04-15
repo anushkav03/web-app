@@ -17,6 +17,8 @@ class UserResponse(UserBase):
     id: int
 
     # why are we returning these?
+    # probably when we call this (?) on main, we can pass this str info
+    # into an html template
     image_file: str | None
     # note image_path is @property in the User model. model_config lets
     # pydantic read it as an attribute so we don't have to recompute file path 
