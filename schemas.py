@@ -24,6 +24,10 @@ class UserResponse(UserBase):
     # pydantic read it as an attribute so we don't have to recompute file path 
     image_path: str
 
+class UserUpdate(BaseModel):
+    username: str | None = Field(min_length=1, max_length=50)
+    email: str | None = Field(max_length=120)
+    image_file: str | None
 
 # our base model for posts
 class PostBase(BaseModel):
@@ -36,6 +40,10 @@ class PostCreate(PostBase):
     user_id: int # temporary for testing
     # eventually (after adding authentication) user_id will be
     # automatically grabbed from session and passed in
+
+class PostUpdate(PostBase):
+    title: str | None = Field(default=None, min_length=1, max_length=100)
+    content: str | None = Field(default=None, min_length=1)
 
 # What our API returns
 class PostResponse(PostBase):
@@ -52,3 +60,8 @@ class PostResponse(PostBase):
     # api response will give nested JSON with full 
     # UserReponse details - email, username etc
     author: UserResponse
+
+
+## UPDATING: Put vs Patch
+# Put replaces the whole record. So you send all fields.
+# Patch replaces only part of a record (ex. update title). So you send only relevant field(s).

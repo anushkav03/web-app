@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 # importing HTTPException twice because FastAPI exception is built ON TOP OF starlette and only handles a subset of all exception cases; starlette handles all cases
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from schemas import PostCreate, PostResponse, UserCreate, UserResponse
+from schemas import PostCreate, PostResponse, UserCreate, UserResponse, PostUpdate, UserUpdate
 from typing import Annotated
 from sqlalchemy import select
 from sqlalchemy.orm import Session, session
@@ -186,6 +186,32 @@ def get_user_posts(user_id: int, db: Annotated[Session, Depends(get_db)]):
     posts = results.scalars().all()
     return posts
 
+@app.patch(
+        "/users/{user_id}",
+        response_model=UserResponse
+        )
+def update_user(user_id: int, user_data: UserUpdate, db: Annotated[Session, Depends(get_db)]):
+    # get user based on user id
+    results = db.execute(
+        select(models.User)
+        .where(models.User.id == user_id)
+    )
+    found_user = results.scalars().first()
+    # verify they exist
+    if not found_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This user ID does not exist!"
+        )
+    # update based on provided fields (using setattr or manual)
+    user = user_data.model_dump(exclude_unset=True)
+    for field, value in user.items():
+        setattr(found_user, field, value)
+
+    db.commit()
+    db.refresh(found_user)
+    return found_user
+
 # Get all posts
 @app.get(
         "/api/posts", 
@@ -245,6 +271,103 @@ def get_post(post_id: int, db: Annotated[Session, Depends(get_db)]):
         status_code=status.HTTP_404_NOT_FOUND,
         detail="This post does not exist!"
     )
+
+# Update post full
+@app.put(
+        "/api/posts/{post_id}",
+        response_model=PostResponse
+)
+# fully replacing post/all fields mandatory => PostCreate
+def update_post_full(post_data: PostCreate, post_id: int, db: Annotated[Session, Depends(get_db)]):
+    # find post
+    results = db.execute( 
+        select(models.Post)
+        .where(models.Post.id == post_id)
+    )
+    post = results.scalars().first()
+
+    # if it doesn't exist, raise exception: can't update nonexistent post
+    if not post:  
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This post does not exist!"
+        )
+    # if request has submitted new user id, check it's legit. 
+    # only check if it's actually different from post's existing user id.
+    if post_data.user_id != post.user_id:
+        # from create_post user verif.
+        result = db.execute(
+            select(models.User)
+            .where(models.User.id == post_data.user_id)
+        ) 
+        user = result.scalars().first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="This user does not exist!"
+            )
+
+    # update post fields
+    post.title = post_data.title
+    post.content = post_data.content
+    post.user_id = post_data.user_id
+
+    # commit to db
+    db.commit()
+    db.refresh(post)
+    return post
+
+# Update post partial
+@app.patch(
+        "/api/posts/{post_id}",
+        response_model=PostResponse
+)
+# fully replacing post/all fields mandatory => PostCreate
+def update_post_partial(post_id: int, post_data: PostUpdate, db: Annotated[Session, Depends(get_db)]):
+    # find post
+    results = db.execute(select(models.Post).where(models.Post.id == post_id))
+    post = results.scalars().first()
+
+    # if it doesn't exist, raise exception: can't update nonexistent post
+    if not post:  
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This post does not exist!"
+        )
+
+    # update post fields dynamically
+    update_data = post_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(post, field, value)
+
+    # commit to db
+    db.commit() 
+    db.refresh(post)
+    return post
+
+# Delete post
+@app.delete(
+        "/api/posts/{post_id}",
+        status_code=status.HTTP_204_NO_CONTENT
+)
+# fully replacing post/all fields mandatory => PostCreate
+def delete_post(post_id: int, db: Annotated[Session, Depends(get_db)]):
+    # find post
+    results = db.execute(select(models.Post).where(models.Post.id == post_id))
+    post = results.scalars().first()
+
+    # if it doesn't exist, raise exception: can't update nonexistent post
+    if not post:  
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This post does not exist!"
+            )
+    
+    # delete post in database
+    db.delete(post)
+    db.commit() # later add auth so that only owners can delete posts
+
+
 
 ## --------------------- ERROR HANDLING --------------------- ##
 # catches some exception errors raised automatically by FastAPI (ex. 404)
