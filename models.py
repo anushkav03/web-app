@@ -28,7 +28,7 @@ class User(Base):
     # relationship
     # one User has many Posts 
     # automatically links to user's all posts
-    posts: Mapped[list[Post]] = relationship(back_populates="author")
+    posts: Mapped[list[Post]] = relationship(back_populates="author", cascade="all, delete-orphan")
 
     @property #keyword lets you access class methods like attributes, via object.method (i think)
     def image_path(self) -> str:

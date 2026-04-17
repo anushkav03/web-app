@@ -212,6 +212,27 @@ def update_user(user_id: int, user_data: UserUpdate, db: Annotated[Session, Depe
     db.refresh(found_user)
     return found_user
 
+@app.delete(
+        "/users/{user_id}",
+        status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
+    # get user
+    results = db.execute(
+        select(models.User)
+        .where(models.User.id == user_id)
+    )
+    found_user = results.scalars().first()
+    # verify they exist
+    if not found_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This user ID does not exist!"
+        )
+    # cascade delete
+    db.delete(found_user) # automatically cascade deleted because of relationship
+    db.commit()
+
 # Get all posts
 @app.get(
         "/api/posts", 
