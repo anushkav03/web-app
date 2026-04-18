@@ -4,13 +4,17 @@ from fastapi import FastAPI, HTTPException, Request, status, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+#from fastapi.responses import JSONResponse
 # importing HTTPException twice because FastAPI exception is built ON TOP OF starlette and only handles a subset of all exception cases; starlette handles all cases
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from schemas import PostCreate, PostResponse, UserCreate, UserResponse, PostUpdate, UserUpdate
 from typing import Annotated
+from contextlib import asynccontextmanager # for lifespan function for async
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler # use default exception handlers instead of json
+
 from sqlalchemy import select
-from sqlalchemy.orm import Session, session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 import models
 from database import Base, engine, get_db
